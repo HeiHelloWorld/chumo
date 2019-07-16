@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>触摸滑动优化</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit:cover" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0,viewport-fit:cover">
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+        }
+        ul{
+            list-style: none;
+        }
+        html,body,#wrap{
+            width: 100%;
+            height: 100%;
+        }
+        .app{
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+        .banner{
+            display: flex;
+        }
+        .banner-item img{
+            width: 100%;
+            display: block;
+        }
+        .action{
+            position: absolute;
+            left: 0;
+            bottom: 5px;
+            width: 100%;
+            text-align: center;
+            font-size: 0;
+        }
+        .action span{
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            margin: 0 2px;
+            border-radius: 50%;
+            background: #5a5a5a;
+        }
+        .action span.active{
+            background: pink;
+        }
+    </style>
+</head>
+<body>
+    <div id="wrap">
+
+        <!--    轮播图    -->
+        <div class="app">
+            <ul class="banner">
+                <li class="banner-item"><img src="img/1.jpg" ></li>
+                <li class="banner-item"><img src="img/2.jpg" ></li>
+                <li class="banner-item"><img src="img/3.jpg" ></li>
+                <li class="banner-item"><img src="img/4.jpg" ></li>
+                <li class="banner-item"><img src="img/5.jpg" ></li>
+            </ul>
+            <div class="action">
+                <span class="active"></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+        <img src="img/content.png" style="width: 100%;margin-top: 20px;">
+    </div>
+
+    <script src="js/transform.js"></script>
+    <script>
+        (function () {
+
+            //获取节点
+            var appNode = document.querySelector(".app");
+            var banner = document.querySelector(".app .banner");
+            var spanItems = document.querySelectorAll(".action span");
+            var index = 0;
+            var delay = 3000;
+            //appNode的位移偏移
+            //var translateX = 0;
+            var itemLength = appNode.querySelectorAll('.banner-item').length;
+
+            //复制一份banner项目
+            banner.innerHTML += banner.innerHTML;
+
+            //获取所有banner项目
+            var bannerItems = appNode.querySelectorAll('.banner-item');
+
+            //布局样式
+            banner.style.width = bannerItems.length * 100 + '%';
+            bannerItems.forEach(function (item) {
+                item.style.width = 100 / bannerItems.length + '%';
+            });
+
+            //自动播放
+            var timeId = setInterval(autoPlay,delay);
+
+            //给banner监听过渡结束事件
+            banner.addEventListener('transitionend',function () {
+                if(index >= bannerItems.length - 1){
+                    index = itemLength - 1;
+                    banner.style.transition = 'none';
+                    transformCss(banner,'translateX', - index * appNode.clientWidth);
+                }
+            });
+
+            //触摸开始事件
+            appNode.addEventListener('touchstart',function (event) {
+
+                //取消过渡效果
+                banner.style.transition = 'none';
+
+                //判断无缝滑动的临界值,一定要在touchstart刚开始的时候判断
+                //才能让图片迅速切换
+                if(index <= 0){
+                    index = itemLength;
+                    transformCss(banner,'translateX', -index * appNode.clientWidth);
+                }else if(index >= bannerItems.length - 1){
+                    index = itemLength - 1;
+                    transformCss(banner,'translateX', -index * appNode.clientWidth);
+                }
+
+                //获取touch对象
+                var touch = event.changedTouches[0];
+
+                //获取水平方向触摸开始位置
+                this.startX = touch.clientX;
+
+                //获取垂直方向触摸开始位置
+                this.startY = touch.clientY;
+
+                //获取图片元素初始位置
+                this.eleLeft = transformCss(banner,'translateX');
+
+                //记录触摸开始时间
+                this.startTime = (new Date).getTime();
+
+                //标记是否为第一次滑动
+                this.isFirstMove = true;
+
+                //标记是否为水平方向滑动
+                this.isHorizontal = true;
+
+                //暂停定时
+                clearInterval(timeId);
+
+                //此时不能禁止浏览器默认行为，否则无法垂直滑动
+                //event.preventDefault();
+
+            });
+
+            //触摸移动事件
+            appNode.addEventListener('touchmove',function (event) {
+
+                //如果不是水平方向的滑动
+                if(!this.isHorizontal){
+                    return;
+                }
+
+                //获取touch对象
+                var touch = event.changedTouches[0];
+                //获取触摸结束位置
+                var endX = touch.clientX;
+
+                //获取垂直touch的结束位置
+                var endY = touch.clientY;
+
+                //触摸点之间的距离
+                this.dstX = endX - this.startX;
+                var dstY = endY - this.startY;
+
+                //如果在touchstart后第一次触发touchmove
+                if(this.isFirstMove){
+                    //已经不是第一次滑动了
+                    this.isFirstMove = false;
+                    //判断是水平滑动还是垂直滑动
+                    //水平滑动距离 < 垂直滑动距离  则是垂直滑动
+                    if(Math.abs(this.dstX) < Math.abs(dstY)){
+                        this.isHorizontal = false; //不是水平滑动了
+                        this.dstX = 0;
+                        return;
+                    }
+                }
+
+                //设置banner的位置
+                transformCss(banner,'translateX',this.eleLeft + this.dstX);
+
+                //阻止浏览器默认动作
+                event.preventDefault();
+
+            });
+
+            //触摸离开事件
+            appNode.addEventListener('touchend',function (event) {
+
+                //添加过渡效果
+                banner.style.transition = '.5s';
+
+                //获取结束时间
+                var endTime = (new Date).getTime();
+
+                //计算时间差
+                var dstTime = endTime - this.startTime;
+
+                //根据时间差判断是否是快速滑动
+                if(dstTime < 300){ //判断为快速滑动
+                    if(this.dstX > 0){
+                        index --;
+                    }else if(this.dstX < 0){
+                        index ++;
+                    }
+                }else{
+                    //普通速度的滑动，计算index的值
+                    index = - Math.round(transformCss(banner,'translateX') / appNode.clientWidth);
+                }
+
+                //重新定时
+                timeId = setInterval(autoPlay,delay);
+
+
+                //调用函数设置位置及小圆点
+                setSwiper(index);
+
+                //index的设定
+                // if(index < 0){
+                //     index = 0;
+                // }else if (index > bannerItems.length -1){
+                //     index = bannerItems.length -1;
+                // }
+
+                //计算偏移量
+                // translateX = - index * appNode.clientWidth;
+
+                //设置banner的位置
+                // banner.style.transform = - 'translateX('+translateX+'px)';
+
+                //滑动的距离大于appNode宽度的一半才切换
+                // if(Math.abs(this.dstX) > appNode.clientWidth / 2){
+                //     //判断左滑还是右滑
+                //     if(this.dstX < 0){ //dxtX的值为负，则为左滑
+                //         index ++;
+                //     }else if(this.dstX > 0){    //dxtX的值为正，则为右滑
+                //         index --;
+                //     }
+                // }
+
+                //去掉所有小圆点的active累
+                // spanItems.forEach(function (item) {
+                //     item.classList.remove('active');
+                // });
+
+                //给当前的小圆点加上active类
+                // spanItems[index].classList.add('active');
+                //
+                // index = index;
+            });
+
+
+
+
+            //给小圆点设置样式的函数
+            function setSwiper(m) {
+                if(m < 0){
+                    m = 0;
+                }else if (m > bannerItems.length -1){
+                    m = bannerItems.length -1;
+                }
+
+                transformCss(banner,'translateX',-m * appNode.clientWidth);
+
+                spanItems.forEach(function (item) {
+                    item.classList.remove('active');
+                });
+
+                //给当前的小圆点加上active类
+                spanItems[m % itemLength].classList.add('active');
+
+                index = m;
+
+            }
+
+            //自动播放的函数
+            function autoPlay() {
+                //设置过渡时间
+                banner.style.transition = '.5s';
+
+                //索引+1
+                index ++;
+
+                //执行变换
+                setSwiper(index);
+
+            }
+
+
+        })();
+    </script>
+
+</body>
+</html>
